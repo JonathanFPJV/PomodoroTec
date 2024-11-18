@@ -2,10 +2,14 @@ package com.bpareja.pomodorotec
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.app.ActivityCompat
@@ -30,7 +34,7 @@ class MainActivity : ComponentActivity() {
         // Solicitar permiso para notificaciones en Android 13+
         requestNotificationPermission()
 
-        }
+    }
 
 
     private fun createNotificationChannel() {
