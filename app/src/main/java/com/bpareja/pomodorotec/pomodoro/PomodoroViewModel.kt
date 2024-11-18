@@ -1,13 +1,16 @@
 package com.bpareja.pomodorotec.pomodoro
 
+import android.Manifest
 import android.app.Application
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.CountDownTimer
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -33,6 +36,14 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
 
     private var countDownTimer: CountDownTimer? = null
     private var timeRemainingInMillis: Long = 25 * 60 * 1000L // Tiempo inicial para FOCUS
+
+    companion object {
+        var instance: PomodoroViewModel? = null
+    }
+    init {
+        instance = this
+    }
+
 
     // Función para iniciar la sesión de concentración
     fun startFocusSession() {
@@ -63,7 +74,13 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
                 val minutes = (millisUntilFinished / 1000) / 60
                 val seconds = (millisUntilFinished / 1000) % 60
                 _timeLeft.value = String.format("%02d:%02d", minutes, seconds)
+
+                showNotification(
+                    "Pomodoro (${_currentPhase.value})",
+                    "Tiempo restante: ${_timeLeft.value}"
+                )
             }
+
 
             override fun onFinish() {
                 _isRunning.value = false
@@ -87,36 +104,57 @@ class PomodoroViewModel(application: Application) : AndroidViewModel(application
         countDownTimer?.cancel()
         _isRunning.value = false
         _currentPhase.value = Phase.FOCUS
-        timeRemainingInMillis = 25 * 60 * 1000L // Restablece a 25 minutos
+        timeRemainingInMillis = 25 * 60 * 1000L
         _timeLeft.value = "25:00"
+
+        NotificationManagerCompat.from(context).cancel(MainActivity.NOTIFICATION_ID)
     }
+
 
     // Muestra la notificación
     private fun showNotification(title: String, message: String) {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
-        val pendingIntent: PendingIntent = PendingIntent.getActivity(
-            context, 0, intent, PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val builder = NotificationCompat.Builder(context, MainActivity.CHANNEL_ID)
-            .setSmallIcon(R.drawable.pomodoro)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-
-        with(NotificationManagerCompat.from(context)) {
-            if (ActivityCompat.checkSelfPermission(
-                    context,
-                    android.Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                return
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            val pauseIntent = Intent(context, NotificationReceiver::class.java).apply {
+                action = "ACTION_PAUSE"
             }
-            notify(MainActivity.NOTIFICATION_ID, builder.build())
+            val pausePendingIntent = PendingIntent.getBroadcast(
+                context, 0, pauseIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val resumeIntent = Intent(context, NotificationReceiver::class.java).apply {
+                action = "ACTION_RESUME"
+            }
+            val resumePendingIntent = PendingIntent.getBroadcast(
+                context, 0, resumeIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val stopIntent = Intent(context, NotificationReceiver::class.java).apply {
+                action = "ACTION_STOP"
+            }
+            val stopPendingIntent = PendingIntent.getBroadcast(
+                context, 0, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val notification = NotificationCompat.Builder(context, MainActivity.CHANNEL_ID)
+                .setSmallIcon(R.drawable.pomodoro)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setOngoing(true)
+                .addAction(R.drawable.ic_pause, "Pausa", pausePendingIntent)
+                .addAction(R.drawable.ic_play, "Continuar", resumePendingIntent)
+                .addAction(R.drawable.ic_stop, "Detener", stopPendingIntent)
+                .setContentIntent(PendingIntent.getActivity(
+                    context, 0, Intent(context, MainActivity::class.java),
+                    PendingIntent.FLAG_IMMUTABLE
+                ))
+                .build()
+
+            NotificationManagerCompat.from(context).notify(MainActivity.NOTIFICATION_ID, notification)
+        } else {
+            Toast.makeText(context, "No se puede mostrar la notificación sin permiso", Toast.LENGTH_SHORT).show()
         }
     }
+
+
 }
